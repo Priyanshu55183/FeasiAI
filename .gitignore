@@ -1,0 +1,12 @@
+# FeasiAI
+.env
+__pycache__/
+*.pyc
+*.pyo
+chroma_db/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.venv/
+venv/
