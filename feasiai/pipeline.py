@@ -1,16 +1,20 @@
 """
 End-to-end pipeline orchestrator.
 
-This is the Phase 1 single-shot pipeline:
+Phase 1 flow:
   Document → Parse → Extract Requirements → Retrieve Evidence → Classify → Report
 
+Phase 2 flow (with agent):
+  Document → Parse → Extract Requirements → Agent Loop (Retrieve ↔ Reason) → Report
+
 Design decisions:
-- Linear pipeline (no agentic planning yet — that's Phase 2).
 - Each step is independently testable.
 - The pipeline tracks total LLM calls and latency for evaluation.
 - Failures in individual requirement processing are caught and logged
   rather than aborting the entire pipeline. Partial results are still
   valuable.
+- USE_AGENT flag toggles between Phase 1 (single-shot) and Phase 2
+  (planner agent). The agent falls back to single-shot on failure.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from pathlib import Path
 from typing import Optional
 
 from feasiai import config
+from feasiai.agent.planner import PlannerAgent
 from feasiai.classification.classifier import classify_requirement
 from feasiai.extraction.requirement_extractor import extract_requirements
 from feasiai.ingestion.parser import parse_document, parse_text
@@ -47,10 +52,13 @@ class FeasibilityPipeline:
         self,
         llm_client: Optional[LLMClient] = None,
         memory_store: Optional[MemoryStore] = None,
+        use_agent: Optional[bool] = None,
     ):
         self._llm = llm_client or LLMClient()
         self._memory = memory_store or MemoryStore()
+        self._use_agent = use_agent if use_agent is not None else config.USE_AGENT
         self._initialized = False
+        self._agent: Optional[PlannerAgent] = None
 
     def initialize(self, memory_docs_dir: Optional[str] = None) -> None:
         """
@@ -67,6 +75,12 @@ class FeasibilityPipeline:
             "Memory store initialized with %d chunks", chunk_count
         )
         self._initialized = True
+
+        # Initialize planner agent if enabled
+        if self._use_agent:
+            self._agent = PlannerAgent(self._llm, self._memory)
+            logger.info("Planner agent enabled (max_steps=%d, confidence_threshold=%.2f)",
+                        config.AGENT_MAX_STEPS, config.AGENT_CONFIDENCE_THRESHOLD)
 
     def run(
         self,
@@ -129,7 +143,8 @@ class FeasibilityPipeline:
             )
 
         # Step 3 & 4: Retrieve evidence and classify each requirement
-        logger.info("Steps 3-4: Retrieving evidence and classifying...")
+        mode_label = "agent" if self._agent else "single-shot"
+        logger.info("Steps 3-4: Retrieving evidence and classifying (%s mode)...", mode_label)
         classifications: list[Classification] = []
 
         for i, req in enumerate(extraction.requirements, 1):
@@ -141,16 +156,19 @@ class FeasibilityPipeline:
             )
 
             try:
-                # Retrieve evidence from memory
+                # Retrieve initial evidence from memory
                 evidences = self._memory.retrieve(req.text)
                 logger.debug(
                     "  Retrieved %d evidence chunks", len(evidences)
                 )
 
-                # Classify
-                classification = classify_requirement(
-                    req, evidences, self._llm
-                )
+                # Classify — agent mode or single-shot
+                if self._agent:
+                    classification = self._agent.assess(req, evidences)
+                else:
+                    classification = classify_requirement(
+                        req, evidences, self._llm
+                    )
                 classifications.append(classification)
 
                 logger.info(

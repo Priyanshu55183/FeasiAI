@@ -44,3 +44,8 @@ MAX_LLM_CALLS_PER_RUN: int = int(os.getenv("MAX_LLM_CALLS_PER_RUN", "50"))
 
 # ─── ChromaDB collection name ───────────────────────────────────────────────
 MEMORY_COLLECTION_NAME: str = "institutional_memory"
+
+# ─── Planner Agent (Phase 2) ────────────────────────────────────────────────
+USE_AGENT: bool = os.getenv("USE_AGENT", "true").lower() in ("true", "1", "yes")
+AGENT_MAX_STEPS: int = int(os.getenv("AGENT_MAX_STEPS", "3"))
+AGENT_CONFIDENCE_THRESHOLD: float = float(os.getenv("AGENT_CONFIDENCE_THRESHOLD", "0.85"))

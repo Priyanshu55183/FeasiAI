@@ -8,10 +8,11 @@ from feasiai.retrieval.memory_store import MemoryStore
 
 @pytest.fixture
 def memory_store(tmp_path):
-    """Create a fresh memory store with temp persistence."""
+    """Create a fresh memory store with ephemeral ChromaDB (no persistence conflicts)."""
     store = MemoryStore(
         persist_dir=str(tmp_path / "chroma"),
         collection_name="test_memory",
+        ephemeral=True,
     )
     return store
 
@@ -71,9 +72,16 @@ class TestRetrieval:
         if results:
             assert all(e.relevance_score < 0.5 for e in results)
 
-    def test_retrieve_empty_store(self, memory_store):
+    def test_retrieve_empty_store(self, tmp_path):
         """Empty store should return empty results."""
-        results = memory_store.retrieve("any query")
+        # Use a unique collection name so the ephemeral singleton
+        # doesn't leak data from populated_store tests.
+        empty_store = MemoryStore(
+            persist_dir=str(tmp_path / "chroma_empty"),
+            collection_name="empty_test_collection",
+            ephemeral=True,
+        )
+        results = empty_store.retrieve("any query")
         assert results == []
 
     def test_evidence_provenance(self, populated_store):

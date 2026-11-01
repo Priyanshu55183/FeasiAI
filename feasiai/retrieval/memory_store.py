@@ -57,17 +57,19 @@ class MemoryStore:
         self,
         persist_dir: Optional[str] = None,
         collection_name: Optional[str] = None,
+        ephemeral: bool = False,
     ):
         self._persist_dir = persist_dir or config.CHROMA_PERSIST_DIR
         self._collection_name = collection_name or config.MEMORY_COLLECTION_NAME
 
-        # Initialize ChromaDB with persistence
-        self._chroma_client = chromadb.Client(
-            chromadb.config.Settings(
-                persist_directory=self._persist_dir,
-                anonymized_telemetry=False,
+        # Initialize ChromaDB — use EphemeralClient for tests (avoids
+        # singleton conflicts) and PersistentClient for production.
+        if ephemeral:
+            self._chroma_client = chromadb.EphemeralClient()
+        else:
+            self._chroma_client = chromadb.PersistentClient(
+                path=self._persist_dir,
             )
-        )
         self._collection = self._chroma_client.get_or_create_collection(
             name=self._collection_name,
             metadata={"hnsw:space": "cosine"},

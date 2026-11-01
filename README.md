@@ -88,6 +88,10 @@ FeasiAI/
 │   │   └── memory_store.py     # Hybrid ChromaDB + BM25 retrieval
 │   ├── classification/
 │   │   └── classifier.py       # Feasibility classifier
+│   ├── agent/                  # Phase 2: Planner agent
+│   │   ├── planner.py          # ReAct agent loop with tool use
+│   │   ├── tools.py            # Agent tools (focused retrieval)
+│   │   └── prompts.py          # Agent prompt templates
 │   └── report/
 │       └── generator.py        # Report assembly + formatting
 ├── data/
@@ -121,20 +125,38 @@ RFP Document
 └────────┬─────────┘  Prompt injection defense
          │
          ▼
-┌──────────────────┐   ┌─────────────────────┐
-│ Hybrid Retrieval  │◄──│ Memory Store         │
-│ (Dense + BM25     │   │ • Product capabilities│
-│  + RRF Fusion)    │   │ • Past proposals      │
-└────────┬─────────┘   │ • Known gaps          │
-         │              └─────────────────────┘
-         ▼
-┌──────────────────┐
-│ Feasibility       │  Single-shot classification
-│ Classifier        │  Confidence + evidence-grounded
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
+┌──────────────────────────────────────────────┐
+│ Planner Agent (Phase 2)                       │
+│                                               │
+│  ┌─────────┐   ┌──────────────────────────┐  │
+│  │ THINK   │──▶│ ACT: call a tool          │  │
+│  │ What    │   │ • search_memory(query)    │  │
+│  │ info do │   │ • check_gaps(query)       │  │
+│  │ I need? │   │ • search_past_proposals() │  │
+│  └─────────┘   └──────────┬───────────────┘  │
+│       ▲                   │                   │
+│       │        ┌──────────▼───────────────┐  │
+│       │        │ OBSERVE: process results │  │
+│       │        └──────────┬───────────────┘  │
+│       │                   │                   │
+│       │        ┌──────────▼───────────────┐  │
+│       └────No──│ Confident enough?        │  │
+│                └──────────┬───────────────┘  │
+│                     Yes   │                   │
+│                           ▼                   │
+│                ┌──────────────────────┐       │
+│                │ CLASSIFY             │       │
+│                │ with full evidence   │       │
+│                └──────────────────────┘       │
+│                                               │
+│  Falls back to single-shot if agent fails     │
+└───────────────────────┬──────────────────────┘
+                        │              ┌─────────────────────┐
+                        │◄─────────────│ Memory Store         │
+                        │              │ • Product capabilities│
+                        │              │ • Past proposals      │
+                        ▼              │ • Known gaps          │
+┌──────────────────┐   └─────────────────────┘
 │ Structured Report │  Summary + per-requirement details
 │ + Human Review    │  ⚠️ Requires sign-off
 └──────────────────┘
@@ -145,25 +167,32 @@ RFP Document
 | Decision | Rationale |
 |----------|-----------|
 | Hybrid retrieval (dense + BM25 + RRF) | Dense catches paraphrases; BM25 catches exact terms. RRF merges without score normalization. |
+| Planner agent with tool use (Phase 2) | Multi-step reasoning gathers targeted evidence; early stopping saves budget on easy requirements. Falls back to single-shot. |
 | Prompt injection defense | RFP text is untrusted input. XML delimiters + explicit ignore instructions. |
 | "Unsupported / Unclear" as first-class label | Admitting uncertainty is better than over-promising. |
 | Unified LLM wrapper with call budget | Every call logged. Hard limit prevents runaway cost. |
 | Evidence-only generation | Classifier can only cite retrieved evidence; no hallucination. |
 | Frozen Pydantic models | Immutable data objects prevent accidental mutation across pipeline steps. |
 
-## Current Status: Phase 1 (Foundation)
+## Current Status: Phase 2 (Planner Agent)
 
 ✅ Implemented:
 - Document ingestion (PDF, DOCX, text)
 - LLM-powered requirement extraction with ambiguity flagging
 - Hybrid retrieval (ChromaDB dense + BM25 sparse + RRF fusion)
-- Single-shot feasibility classification
-- Structured reporting with provenance
+- Single-shot feasibility classification (Phase 1 baseline)
+- **Planner Agent with multi-step reasoning (Phase 2)**
+  - ReAct loop: Think → Act → Observe → Classify
+  - Three tools: search_memory, check_gaps, search_past_proposals
+  - Early stopping when confident (saves LLM budget)
+  - Per-requirement step budget enforcement
+  - Graceful fallback to single-shot on failure
+  - Full agent trace for observability
+- Structured reporting with provenance + agent traces
 - Full test suite (no API key needed)
 - Prompt injection defenses
 
 🔜 Coming in later phases:
-- Planner Agent with tool-use budget & early stopping
 - Live data layer (roadmap, tickets, feature flags)
 - Conflict detection between memory and live data
 - Evaluation harness with labeled dataset & ablations

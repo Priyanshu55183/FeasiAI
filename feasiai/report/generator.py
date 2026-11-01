@@ -153,6 +153,25 @@ def format_report_text(report: FeasibilityReport) -> str:
             )
             lines.append(f"      Evidence from: {', '.join(sorted(sources))}")
 
+        # Agent trace (Phase 2)
+        if classification.agent_trace:
+            trace = classification.agent_trace
+            if trace.fallback_used:
+                lines.append("      Agent: ⚡ single-shot fallback")
+            elif trace.early_stopped:
+                lines.append("      Agent: ⚡ early stop (confident on initial evidence)")
+            else:
+                lines.append(
+                    f"      Agent: {trace.total_tool_calls} tool call(s), "
+                    f"{trace.total_llm_calls} LLM call(s)"
+                )
+                for step in trace.steps:
+                    if step.action:
+                        lines.append(
+                            f"        → {step.action.tool}('{step.action.query[:50]}') "
+                            f"→ {step.action.result_count} result(s)"
+                        )
+
     lines.append("")
     lines.append("=" * 80)
     lines.append("  ⚠️  HUMAN REVIEW REQUIRED — This report requires sign-off")

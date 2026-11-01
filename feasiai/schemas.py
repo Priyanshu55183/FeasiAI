@@ -15,7 +15,7 @@ Design decisions:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
@@ -95,7 +95,7 @@ class Evidence(BaseModel):
         None, description="Chunk identifier within the source"
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="When this evidence was retrieved or last updated",
     )
     relevance_score: float = Field(
@@ -144,6 +144,60 @@ class Classification(BaseModel):
         "",
         description="Draft client-facing response text grounded in evidence",
     )
+    agent_trace: Optional["AgentTrace"] = Field(
+        None,
+        description="Full agent reasoning trace (None for single-shot Phase 1 mode)",
+    )
+
+    model_config = {"frozen": True}
+
+
+# ─── Agent Schemas (Phase 2) ───────────────────────────────────────────────
+
+
+class AgentAction(BaseModel):
+    """A single tool call made by the planner agent."""
+
+    tool: str = Field(..., description="Tool name: search_memory | check_gaps | search_past_proposals")
+    query: str = Field(..., description="The query the agent formulated for the tool")
+    result_count: int = Field(0, description="Number of evidence chunks returned")
+
+    model_config = {"frozen": True}
+
+
+class AgentStep(BaseModel):
+    """One think → act → observe cycle in the agent loop."""
+
+    step_number: int = Field(..., description="1-indexed step number")
+    thought: str = Field("", description="Agent's reasoning about what to do next")
+    action: Optional[AgentAction] = Field(
+        None, description="Tool call (None if this is the final classify step)"
+    )
+    observation_summary: str = Field(
+        "", description="Brief summary of what the tool returned"
+    )
+
+    model_config = {"frozen": True}
+
+
+class AgentTrace(BaseModel):
+    """
+    Full trace of the planner agent's reasoning for one requirement.
+
+    This provides full observability into multi-step reasoning:
+    every thought, tool call, and observation is recorded.
+    """
+
+    requirement_id: str = Field(..., description="ID of the requirement being assessed")
+    steps: list[AgentStep] = Field(default_factory=list)
+    total_tool_calls: int = Field(0, description="Number of tool invocations")
+    total_llm_calls: int = Field(0, description="Number of LLM calls (including reasoning)")
+    early_stopped: bool = Field(
+        False, description="True if confidence threshold triggered early stop"
+    )
+    fallback_used: bool = Field(
+        False, description="True if fell back to single-shot classification"
+    )
 
     model_config = {"frozen": True}
 
@@ -175,7 +229,7 @@ class FeasibilityReport(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     source_document: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     requirements: list[Requirement] = Field(default_factory=list)
     classifications: list[Classification] = Field(default_factory=list)
     summary: dict = Field(
@@ -205,7 +259,7 @@ class LLMCallRecord(BaseModel):
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     model: str = ""
     purpose: str = Field("", description="e.g. 'extraction', 'classification'")
     prompt_messages: list[dict] = Field(default_factory=list)
