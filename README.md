@@ -56,7 +56,17 @@ python run_pipeline.py --json-output report.json
 python run_pipeline.py -v
 ```
 
-### 4. Run Tests
+### 4. Launch the Review UI
+
+```bash
+# Launch the Streamlit review interface
+streamlit run feasiai/ui/app.py
+
+# Then open http://localhost:8501 in your browser
+# Use "Load Demo Report" in the sidebar to explore without an API key
+```
+
+### 5. Run Tests
 
 ```bash
 # Run all tests (no API key needed — tests use mocks)
@@ -92,8 +102,16 @@ FeasiAI/
 │   │   ├── planner.py          # ReAct agent loop with tool use
 │   │   ├── tools.py            # Agent tools (focused retrieval)
 │   │   └── prompts.py          # Agent prompt templates
-│   └── report/
-│       └── generator.py        # Report assembly + formatting
+│   ├── report/
+│   │   └── generator.py        # Report assembly + formatting
+│   └── ui/                     # Phase 2: Streamlit review UI
+│       ├── app.py              # Main app entry point
+│       ├── utils.py            # Report loading, export helpers
+│       └── components/
+│           ├── sidebar.py      # Upload, pipeline runner, settings
+│           ├── dashboard.py    # Summary stats + charts
+│           ├── table.py        # Requirements table with filters
+│           └── detail.py       # Evidence, agent trace, overrides
 ├── data/
 │   ├── memory/                 # Institutional knowledge documents
 │   │   ├── product_capabilities.md
@@ -174,29 +192,35 @@ RFP Document
 | Evidence-only generation | Classifier can only cite retrieved evidence; no hallucination. |
 | Frozen Pydantic models | Immutable data objects prevent accidental mutation across pipeline steps. |
 
-## Current Status: Phase 2 (Planner Agent)
+## Current Status: Phase 2 (Planner Agent + Review UI)
 
 ✅ Implemented:
 - Document ingestion (PDF, DOCX, text)
 - LLM-powered requirement extraction with ambiguity flagging
 - Hybrid retrieval (ChromaDB dense + BM25 sparse + RRF fusion)
 - Single-shot feasibility classification (Phase 1 baseline)
-- **Planner Agent with multi-step reasoning (Phase 2)**
+- **Planner Agent with multi-step reasoning (Phase 2A)**
   - ReAct loop: Think → Act → Observe → Classify
   - Three tools: search_memory, check_gaps, search_past_proposals
   - Early stopping when confident (saves LLM budget)
   - Per-requirement step budget enforcement
   - Graceful fallback to single-shot on failure
   - Full agent trace for observability
-- Structured reporting with provenance + agent traces
-- Full test suite (no API key needed)
+- **Streamlit Review UI (Phase 2B)**
+  - Upload JSON report or run pipeline live from the browser
+  - Dashboard with label distribution chart and key metrics
+  - Filterable requirements table (by label, confidence, section, text)
+  - Per-requirement detail view with evidence viewer and agent trace timeline
+  - Reviewer label overrides + notes
+  - JSON and CSV export with overrides applied
+  - Demo mode with realistic sample data
+- Full test suite (117 tests, no API key needed)
 - Prompt injection defenses
 
 🔜 Coming in later phases:
 - Live data layer (roadmap, tickets, feature flags)
 - Conflict detection between memory and live data
 - Evaluation harness with labeled dataset & ablations
-- Streamlit review UI
 - Closed-loop memory updates from delivery outcomes
 
 ## License
