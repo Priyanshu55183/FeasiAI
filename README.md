@@ -66,7 +66,24 @@ streamlit run feasiai/ui/app.py
 # Use "Load Demo Report" in the sidebar to explore without an API key
 ```
 
-### 5. Run Tests
+### 5. Run the Evaluation Harness
+
+```bash
+# Run agent vs single-shot comparison on the 25-sample labeled dataset
+python run_eval.py
+
+# Run only one mode
+python run_eval.py --mode agent
+python run_eval.py --mode single_shot
+
+# Quick smoke test (first 5 samples)
+python run_eval.py --limit 5
+
+# Save JSON results
+python run_eval.py --output-dir eval/results/
+```
+
+### 6. Run Tests
 
 ```bash
 # Run all tests (no API key needed — tests use mocks)
@@ -112,6 +129,8 @@ FeasiAI/
 │           ├── dashboard.py    # Summary stats + charts
 │           ├── table.py        # Requirements table with filters
 │           └── detail.py       # Evidence, agent trace, overrides
+├── eval/
+│   └── dataset.jsonl           # 25 labeled ground-truth samples
 ├── data/
 │   ├── memory/                 # Institutional knowledge documents
 │   │   ├── product_capabilities.md
