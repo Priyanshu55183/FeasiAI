@@ -134,15 +134,17 @@ def export_report_json(
     report: FeasibilityReport,
     overrides: dict[str, str],
     notes: dict[str, str],
+    approvals: Optional[dict[str, bool]] = None,
 ) -> str:
     """
     Export the report as JSON with reviewer overrides applied.
 
     Overrides replace the original label; notes are added as a new field.
     """
+    approvals = approvals or {}
     data = json.loads(report.model_dump_json())
 
-    # Apply overrides and notes
+    # Apply overrides, notes, and approvals
     for classification in data.get("classifications", []):
         req_id = classification.get("requirement_id", "")
         if req_id in overrides and overrides[req_id]:
@@ -151,9 +153,11 @@ def export_report_json(
             classification["reviewer_overridden"] = True
         if req_id in notes and notes[req_id]:
             classification["reviewer_notes"] = notes[req_id]
+        classification["approved_for_proposal"] = approvals.get(req_id, False)
 
     data["export_timestamp"] = datetime.now(timezone.utc).isoformat()
     data["has_reviewer_overrides"] = any(bool(v) for v in overrides.values())
+    data["approved_count"] = sum(1 for v in approvals.values() if v)
 
     return json.dumps(data, indent=2, default=str)
 
@@ -162,11 +166,13 @@ def export_report_csv(
     report: FeasibilityReport,
     overrides: dict[str, str],
     notes: dict[str, str],
+    approvals: Optional[dict[str, bool]] = None,
 ) -> str:
     """
     Export a flat CSV of all requirements with classifications.
     """
     req_map = {r.id: r for r in report.requirements}
+    approvals = approvals or {}
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -178,8 +184,10 @@ def export_report_csv(
         "Requirement Text",
         "AI Label",
         "Reviewer Label",
+        "Approved for Proposal",
         "Confidence",
         "Is Ambiguous",
+        "Conflicts",
         "Reasoning",
         "What Would Change",
         "Draft Response",
@@ -191,10 +199,16 @@ def export_report_csv(
         req = req_map.get(c.requirement_id)
         override_label = overrides.get(c.requirement_id, "")
         note = notes.get(c.requirement_id, "")
+        approved = approvals.get(c.requirement_id, False)
         evidence_sources = ", ".join(sorted(set(
             e.source_document or "unknown"
             for e in c.supporting_evidence
         )))
+        # Conflict summary
+        conflict_summary = ""
+        if c.conflicts:
+            severities = [w.severity for w in c.conflicts]
+            conflict_summary = f"{len(c.conflicts)} conflict(s): {', '.join(severities)}"
 
         writer.writerow([
             i,
@@ -202,8 +216,10 @@ def export_report_csv(
             req.text if req else "Unknown",
             c.label.value,
             override_label if override_label else "",
+            "Yes" if approved else "No",
             f"{c.confidence:.0%}",
             "Yes" if req and req.is_ambiguous else "No",
+            conflict_summary,
             c.reasoning,
             c.what_would_change,
             c.draft_response,
@@ -223,10 +239,12 @@ def init_session_state(st_module: Any) -> None:
         "report": None,
         "overrides": {},       # {requirement_id: new_label_string}
         "notes": {},           # {requirement_id: reviewer_note}
+        "approvals": {},       # {requirement_id: bool} — proposal-approved gate
         "filter_labels": [],   # label values to show
         "filter_min_conf": 0.0,
         "filter_max_conf": 1.0,
         "filter_ambiguous_only": False,
+        "filter_conflicts_only": False,
         "filter_search": "",
         "selected_req_idx": None,
         "pipeline_running": False,

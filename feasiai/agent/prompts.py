@@ -15,11 +15,16 @@ Design decisions:
 
 4. SECURITY: Same XML-delimiter + ignore-instructions pattern as Phase 1,
    extended to cover the multi-turn agent conversation.
+
+5. DYNAMIC TOOLS: build_system_prompt() accepts an optional tools dict so
+   it can be called with a live-data-enriched tool set when a LiveDataRegistry
+   is configured. Falls back to base tools when not provided.
 """
 
 from __future__ import annotations
 
-from feasiai.agent.tools import AgentToolkit
+from typing import Optional
+
 from feasiai.schemas import Evidence, Requirement
 
 
@@ -74,23 +79,47 @@ STRATEGY:
 3. If evidence is weak, use search_memory with different query formulations.
 4. Use check_gaps to proactively look for counter-evidence or limitations.
 5. Use search_past_proposals to find precedent from similar past RFPs.
-6. PREFER UNCERTAINTY: If evidence is weak or conflicting, classify as "Unsupported / Unclear".
+6. If search_live_data is available, use it to verify current delivery status and detect conflicts with memory evidence.
+7. PREFER UNCERTAINTY: If evidence is weak or conflicting, classify as "Unsupported / Unclear".
 
 Return ONLY the JSON object. No other text."""
 
 
-def format_tool_descriptions() -> str:
-    """Format tool descriptions for inclusion in the system prompt."""
+def format_tool_descriptions(tools: Optional[dict[str, str]] = None) -> str:
+    """
+    Format tool descriptions for inclusion in the system prompt.
+
+    Args:
+        tools: Dict of tool_name → description. If None, uses base tools only.
+
+    Returns:
+        Formatted multi-line string of tool descriptions.
+    """
+    if tools is None:
+        # Import here to avoid circular imports at module level
+        from feasiai.agent.tools import AgentToolkit
+        tools = AgentToolkit._BASE_TOOLS
+
     parts = []
-    for name, desc in AgentToolkit.AVAILABLE_TOOLS.items():
+    for name, desc in tools.items():
         parts.append(f"- {name}: {desc}")
     return "\n".join(parts)
 
 
-def build_system_prompt() -> str:
-    """Build the complete system prompt with tool descriptions."""
+def build_system_prompt(tools: Optional[dict[str, str]] = None) -> str:
+    """
+    Build the complete system prompt with tool descriptions.
+
+    Args:
+        tools: Optional dict of available tools. When provided (e.g. including
+               'search_live_data'), it overrides the default tool set shown
+               in the prompt. Pass AgentToolkit.AVAILABLE_TOOLS directly.
+
+    Returns:
+        Formatted system prompt string.
+    """
     return PLANNER_SYSTEM_PROMPT.format(
-        tool_descriptions=format_tool_descriptions()
+        tool_descriptions=format_tool_descriptions(tools)
     )
 
 

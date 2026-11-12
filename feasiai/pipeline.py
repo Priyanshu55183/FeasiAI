@@ -7,6 +7,9 @@ Phase 1 flow:
 Phase 2 flow (with agent):
   Document → Parse → Extract Requirements → Agent Loop (Retrieve ↔ Reason) → Report
 
+Phase 3 flow (with live data):
+  Document → Parse → Extract → Agent Loop (Memory + Live Sources) → Conflict Detection → Report
+
 Design decisions:
 - Each step is independently testable.
 - The pipeline tracks total LLM calls and latency for evaluation.
@@ -15,6 +18,8 @@ Design decisions:
   valuable.
 - USE_AGENT flag toggles between Phase 1 (single-shot) and Phase 2
   (planner agent). The agent falls back to single-shot on failure.
+- live_registry is optional and opt-in. When None, the pipeline
+  behaves identically to Phase 2 — no live data calls are made.
 """
 
 from __future__ import annotations
@@ -22,7 +27,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from feasiai import config
 from feasiai.agent.planner import PlannerAgent
@@ -33,6 +38,9 @@ from feasiai.llm.client import LLMClient
 from feasiai.report.generator import build_report, format_report_text
 from feasiai.retrieval.memory_store import MemoryStore
 from feasiai.schemas import Classification, FeasibilityReport, Requirement
+
+if TYPE_CHECKING:
+    from feasiai.live.registry import LiveDataRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +54,12 @@ class FeasibilityPipeline:
         pipeline.initialize()  # Load memory store
         report = pipeline.run("path/to/rfp.pdf")
         print(pipeline.format_report(report))
+
+        # With live data (Phase 3):
+        from feasiai.live import LiveDataRegistry, RoadmapConnector
+        registry = LiveDataRegistry()
+        registry.register(RoadmapConnector())
+        pipeline = FeasibilityPipeline(live_registry=registry)
     """
 
     def __init__(
@@ -53,10 +67,12 @@ class FeasibilityPipeline:
         llm_client: Optional[LLMClient] = None,
         memory_store: Optional[MemoryStore] = None,
         use_agent: Optional[bool] = None,
+        live_registry: Optional["LiveDataRegistry"] = None,
     ):
         self._llm = llm_client or LLMClient()
         self._memory = memory_store or MemoryStore()
         self._use_agent = use_agent if use_agent is not None else config.USE_AGENT
+        self._live_registry = live_registry
         self._initialized = False
         self._agent: Optional[PlannerAgent] = None
 
@@ -78,9 +94,20 @@ class FeasibilityPipeline:
 
         # Initialize planner agent if enabled
         if self._use_agent:
-            self._agent = PlannerAgent(self._llm, self._memory)
-            logger.info("Planner agent enabled (max_steps=%d, confidence_threshold=%.2f)",
-                        config.AGENT_MAX_STEPS, config.AGENT_CONFIDENCE_THRESHOLD)
+            self._agent = PlannerAgent(
+                self._llm,
+                self._memory,
+                live_registry=self._live_registry,
+            )
+            live_info = ""
+            if self._live_registry and len(self._live_registry) > 0:
+                live_info = f", live connectors: {self._live_registry.active_connectors}"
+            logger.info(
+                "Planner agent enabled (max_steps=%d, confidence_threshold=%.2f%s)",
+                config.AGENT_MAX_STEPS,
+                config.AGENT_CONFIDENCE_THRESHOLD,
+                live_info,
+            )
 
     def run(
         self,

@@ -49,3 +49,16 @@ MEMORY_COLLECTION_NAME: str = "institutional_memory"
 USE_AGENT: bool = os.getenv("USE_AGENT", "true").lower() in ("true", "1", "yes")
 AGENT_MAX_STEPS: int = int(os.getenv("AGENT_MAX_STEPS", "3"))
 AGENT_CONFIDENCE_THRESHOLD: float = float(os.getenv("AGENT_CONFIDENCE_THRESHOLD", "0.85"))
+
+# ─── Live Data Layer (Phase 3) ──────────────────────────────────────────────
+# Jira connector — set all three to enable
+JIRA_BASE_URL: str = os.getenv("JIRA_BASE_URL", "")
+JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "")
+JIRA_API_TOKEN: str = os.getenv("JIRA_API_TOKEN", "")
+# Optional: comma-separated project keys to scope Jira JQL, e.g. "ENG,INFRA"
+JIRA_PROJECT_KEYS: str = os.getenv("JIRA_PROJECT_KEYS", "")
+
+# Roadmap connector — points to a local YAML or JSON file
+ROADMAP_FILE_PATH: str = os.getenv(
+    "ROADMAP_FILE_PATH", str(_PROJECT_ROOT / "data" / "roadmap.yaml")
+)

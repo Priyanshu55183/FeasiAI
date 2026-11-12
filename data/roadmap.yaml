@@ -1,0 +1,55 @@
+# Sample product roadmap for FeasiAI live data connector.
+# Used as a fixture in tests and as a demo data source.
+#
+# Status values: planned | in_progress | shipped | cancelled
+#
+features:
+  - feature: "Shopify Integration"
+    status: "planned"
+    eta: "Q3 2027"
+    notes: "E-commerce connector planned, not yet funded. Will sync orders and inventory."
+
+  - feature: "HIPAA Compliance"
+    status: "in_progress"
+    eta: "Q1 2027"
+    notes: "BAA process underway, targeting healthcare vertical. Security audit in progress."
+
+  - feature: "FedRAMP Authorization"
+    status: "planned"
+    eta: "Q4 2027"
+    notes: "Required for US federal government contracts. Sponsor identified."
+
+  - feature: "Real-time Analytics Dashboard"
+    status: "planned"
+    eta: "Q2 2027"
+    notes: "Live metrics for pipeline runs, accuracy trends, and cost tracking."
+
+  - feature: "Mobile App (iOS/Android)"
+    status: "cancelled"
+    notes: "Deprioritized in favor of responsive web. No timeline for reconsideration."
+
+  - feature: "SSO / SAML Integration"
+    status: "shipped"
+    eta: "Q4 2026"
+    notes: "SAML 2.0 and OIDC support shipped. Okta, Azure AD, and Google Workspace tested."
+
+  - feature: "SOC 2 Type II Certification"
+    status: "shipped"
+    eta: "Q3 2026"
+    notes: "Certified September 2026. Audit report available under NDA."
+
+  - feature: "REST API Public Access"
+    status: "in_progress"
+    eta: "Q1 2027"
+    notes: "Public API v1 in beta. Rate limits and API key management in final review."
+
+  - feature: "Multi-tenant Support"
+    status: "shipped"
+    eta: "Q2 2026"
+    notes: "Full data isolation between tenants. Configurable per-tenant retention."
+
+  - feature: "Data Residency (EU/APAC)"
+    status: "planned"
+    eta: "Q2 2027"
+    notes: "EU region (Frankfurt) planned first. APAC (Singapore) follows in Q3 2027."
+

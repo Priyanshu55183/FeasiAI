@@ -26,13 +26,18 @@ Design decisions:
 6. FULL TRACING: Every step is recorded in an AgentTrace object attached
    to the Classification. This provides complete observability into
    how the agent reached its conclusion.
+
+7. LIVE DATA (Phase 3): An optional LiveDataRegistry can be injected.
+   When present, it is passed to AgentToolkit which exposes a 4th tool
+   'search_live_data'. The system prompt is built dynamically to include
+   this tool only when the registry is non-empty.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from feasiai import config
 from feasiai.agent.prompts import (
@@ -54,6 +59,9 @@ from feasiai.schemas import (
     Requirement,
 )
 
+if TYPE_CHECKING:
+    from feasiai.live.registry import LiveDataRegistry
+
 logger = logging.getLogger(__name__)
 
 
@@ -67,6 +75,12 @@ class PlannerAgent:
     Usage:
         agent = PlannerAgent(llm_client, memory_store)
         classification = agent.assess(requirement, initial_evidence)
+
+        # With live data:
+        from feasiai.live import LiveDataRegistry, RoadmapConnector
+        registry = LiveDataRegistry()
+        registry.register(RoadmapConnector())
+        agent = PlannerAgent(llm_client, memory_store, live_registry=registry)
     """
 
     def __init__(
@@ -75,9 +89,10 @@ class PlannerAgent:
         memory_store: MemoryStore,
         max_steps: Optional[int] = None,
         confidence_threshold: Optional[float] = None,
+        live_registry: Optional["LiveDataRegistry"] = None,
     ):
         self._llm = llm_client
-        self._toolkit = AgentToolkit(memory_store)
+        self._toolkit = AgentToolkit(memory_store, live_registry=live_registry)
         self._max_steps = max_steps if max_steps is not None else config.AGENT_MAX_STEPS
         self._confidence_threshold = (
             confidence_threshold
@@ -131,8 +146,8 @@ class PlannerAgent:
             self._toolkit._seen_chunk_ids.add(chunk_id)
             self._toolkit._all_evidence.append(ev)
 
-        # Build conversation
-        system_prompt = build_system_prompt()
+        # Build system prompt with the current tool set (may include search_live_data)
+        system_prompt = build_system_prompt(tools=self._toolkit.AVAILABLE_TOOLS)
         initial_msg = format_initial_context(requirement, initial_evidence)
 
         messages = [

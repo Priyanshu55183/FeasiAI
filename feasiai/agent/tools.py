@@ -16,16 +16,25 @@ Design decisions:
 
 4. RESULT CAPPING: Each tool returns at most top_k results to keep
    the agent's context window manageable.
+
+5. LIVE DATA TOOL (Phase 3): An optional fourth tool 'search_live_data'
+   is registered when a LiveDataRegistry is provided. It fans out to all
+   registered connectors (Jira, roadmap, etc.) and returns LIVE_DATA evidence.
+   Only added to AVAILABLE_TOOLS when the registry is non-empty, so the agent
+   system prompt remains accurate about which tools are callable.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from feasiai import config
 from feasiai.retrieval.memory_store import MemoryStore
 from feasiai.schemas import Evidence
+
+if TYPE_CHECKING:
+    from feasiai.live.registry import LiveDataRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -42,21 +51,40 @@ class AgentToolkit:
     tracks all evidence returned for deduplication.
     """
 
-    AVAILABLE_TOOLS = {
+    _BASE_TOOLS = {
         "search_memory": "Search all institutional memory with a custom query. Use for general evidence gathering.",
         "check_gaps": "Search specifically for known gaps and limitations. Use to find counter-evidence or confirm unsupported capabilities.",
         "search_past_proposals": "Search past proposals for precedent. Use to find similar requirements from previous RFPs and their outcomes.",
+    }
+
+    _LIVE_DATA_TOOL = {
+        "search_live_data": "Search live operational data sources (roadmap, tickets, feature flags). Use to verify current delivery status and detect conflicts with memory evidence.",
     }
 
     def __init__(
         self,
         memory_store: MemoryStore,
         top_k: Optional[int] = None,
+        live_registry: Optional["LiveDataRegistry"] = None,
     ):
         self._memory = memory_store
         self._top_k = top_k or config.RETRIEVAL_TOP_K
+        self._live_registry = live_registry
         self._seen_chunk_ids: set[str] = set()
         self._all_evidence: list[Evidence] = []
+
+    @property
+    def AVAILABLE_TOOLS(self) -> dict[str, str]:
+        """
+        Returns the set of tools available given the current configuration.
+
+        Includes 'search_live_data' only when a non-empty LiveDataRegistry
+        is configured — keeps the agent system prompt accurate.
+        """
+        tools = dict(self._BASE_TOOLS)
+        if self._live_registry and len(self._live_registry) > 0:
+            tools.update(self._LIVE_DATA_TOOL)
+        return tools
 
     def execute(self, tool_name: str, query: str) -> list[Evidence]:
         """
@@ -86,6 +114,8 @@ class AgentToolkit:
             results = self._check_gaps(query)
         elif tool_name == "search_past_proposals":
             results = self._search_past_proposals(query)
+        elif tool_name == "search_live_data":
+            results = self._search_live_data(query)
         else:
             results = []
 
@@ -159,6 +189,18 @@ class AgentToolkit:
 
         combined = proposal_results + other_results
         return combined[: self._top_k]
+
+    def _search_live_data(self, query: str) -> list[Evidence]:
+        """
+        Search all registered live data connectors.
+
+        Returns [] if no registry is configured or registry is empty.
+        Individual connector failures are handled inside the registry.
+        """
+        if not self._live_registry:
+            logger.debug("search_live_data: no live registry configured")
+            return []
+        return self._live_registry.retrieve_all(query, top_k=self._top_k)
 
     # ── Deduplication ─────────────────────────────────────────────────
 

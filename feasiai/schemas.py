@@ -109,6 +109,37 @@ class Evidence(BaseModel):
     model_config = {"frozen": True}
 
 
+class ConflictWarning(BaseModel):
+    """
+    A detected conflict between institutional memory evidence and live data.
+
+    Attached to Classification.conflicts to surface contradictions between
+    what the institutional memory says and what live systems (roadmap, Jira) show.
+    This is a first-class schema so conflicts appear in reports and exports.
+    """
+
+    requirement_id: str = Field(..., description="ID of the affected requirement")
+    severity: str = Field(
+        ...,
+        description="Conflict severity: 'low' | 'medium' | 'high'",
+    )
+    description: str = Field(
+        ...,
+        description="Human-readable explanation of the conflict",
+    )
+    memory_evidence_id: Optional[str] = Field(
+        None, description="ID of the contradicted memory Evidence"
+    )
+    live_evidence_id: Optional[str] = Field(
+        None, description="ID of the contradicting live-data Evidence"
+    )
+    live_status: Optional[str] = Field(
+        None, description="Status from live data (e.g. 'cancelled', 'planned')"
+    )
+
+    model_config = {"frozen": True}
+
+
 class Classification(BaseModel):
     """
     Feasibility classification for a single requirement.
@@ -147,6 +178,10 @@ class Classification(BaseModel):
     agent_trace: Optional["AgentTrace"] = Field(
         None,
         description="Full agent reasoning trace (None for single-shot Phase 1 mode)",
+    )
+    conflicts: list["ConflictWarning"] = Field(
+        default_factory=list,
+        description="Conflicts detected between memory evidence and live data (Phase 3)",
     )
 
     model_config = {"frozen": True}
